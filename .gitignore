@@ -1,0 +1,6 @@
+_ReSharper*
+bin
+obj
+/.vs/SBC/v15/Server/sqlite3
+/README
+/ArrayEqualityComparer.cs
