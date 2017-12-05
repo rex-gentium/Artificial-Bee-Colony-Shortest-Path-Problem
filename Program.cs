@@ -13,26 +13,24 @@ namespace SimulatedBeeColony
             try
             {
                 int pathStart = 0, pathEnd = 0;
-                EdgeList graph = LoadGraph("D:\\dump\\graph2.txt", ref pathStart, ref pathEnd);
+                EdgeList graph = LoadGraph("D:\\dump\\graph4bee.txt", ref pathStart, ref pathEnd);
                 Console.WriteLine("Loaded graph:");
                 Console.WriteLine(graph.ToString());
 
-                int totalNumberBees = 10;
+                int totalNumberBees = 30;
                 
-                int numberInactive = Convert.ToInt32(totalNumberBees * .85); ;
+                int numberWorkers = Convert.ToInt32(totalNumberBees * .85); ;
                 int numberScout = Convert.ToInt32(totalNumberBees * .15); ;
 
                 int maxNumberVisits = 5;
                 int maxNumberCycles = 10;
+                int reportFreq = 1;
 
-                Hive hive = new Hive(numberInactive, numberScout, maxNumberVisits, maxNumberCycles, graph, pathStart, pathEnd);
-                Console.WriteLine("\nInitial random hive");
-                Console.WriteLine(hive);
-
+                Hive hive = new Hive(numberWorkers, numberScout, maxNumberVisits, 
+                    graph, pathStart, pathEnd, maxNumberCycles, reportFreq);
+                
                 hive.Solve();
 
-                Console.WriteLine("\nFinal hive");
-                Console.WriteLine(hive);
                 Console.ReadLine();
             }
             catch (Exception ex)
@@ -44,7 +42,7 @@ namespace SimulatedBeeColony
 
         private static EdgeList LoadGraph(string filePath, ref int pathStart, ref int pathEnd)
         {
-            Random rand = new Random();
+            Random rand = new Random(0);
             using (StreamReader sr = new StreamReader(filePath))
             {
                 string line = sr.ReadLine();

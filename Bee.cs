@@ -12,7 +12,15 @@ namespace SBC
         public Status CurrentStatus { set; get; }
         private int[] currentPath;
         private int currentPathDistance;
-        public int[] CurrentPath { get => currentPath; }
+        public int[] CurrentPath
+        {
+            get
+            {
+                int[] res = new int[currentPath.Length];
+                Array.Copy(currentPath, res, currentPath.Length);
+                return res;
+            }
+        }
         public int CurrentPathDistance { get => currentPathDistance; }
         public int UnluckyIterCount { set; get; }
 

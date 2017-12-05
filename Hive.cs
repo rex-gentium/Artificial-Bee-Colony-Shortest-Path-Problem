@@ -7,20 +7,22 @@ namespace SBC
 {
     class Hive
     {
-        static Random random = null; // multipurpose
+        static Random random; // multipurpose
 
-        private EdgeList graph;
-        private int pathStart, pathEnd;
+        EdgeList graph;
+        int pathStart, pathEnd;
 
-        public int maxCycles; // за одну итерацию все агенты совершают по одному действию
+        int maxCycles; // за одну итерацию все агенты совершают по одному действию
+        int reportEvery;
 
-        public double probPersuasion = 0.95;    // вероятность бездействующей пчелы откликнуться на танец разведчика
-        public double probMistake = 0.01;       // вероятность пчелы-работника принять ошибочное решение
+        public double PersuasionProbability { get; set; }    // вероятность бездействующей пчелы откликнуться на танец разведчика
+        public double MistakeProbability { get; set; }       // вероятность пчелы-работника принять ошибочное решение
 
-        public List<Bee> scouts, onlookers, employed;
+        int workerCount, scoutCount;
+
+        List<Bee> scouts, onlookers, employed;
         public int BeesCount { get => scouts.Count + onlookers.Count + employed.Count; }
-        public Dictionary<int[], int> scoutedPaths;
-        public Dictionary<int[], int> solutions;
+        Dictionary<int[], int> scoutedPaths;    // решения, найденные разведчиками
 
         private int[] bestPath;
         private int bestDistance;
@@ -44,26 +46,28 @@ namespace SBC
             return s;
         }
 
-        public Hive(int onlookerCount, int scoutCount, int maxNumberVisits,
-          int maxNumberCycles, EdgeList graph, int pathStart, int pathEnd)
+        public Hive(int workerCount, int scoutCount, int maxNumberVisits,
+          EdgeList graph, int pathStart, int pathEnd, int maxCycles, int reportEvery)
         {
             random = new Random();
             Bee.MaxUnluckyItersCount = maxNumberVisits;
-            this.maxCycles = maxNumberCycles;
+            this.maxCycles = maxCycles;
+            this.reportEvery = reportEvery;
             this.graph = graph;
             this.pathStart = pathStart;
             this.pathEnd = pathEnd;
             this.scoutedPaths = new Dictionary<int[], int>();
-            this.solutions = new Dictionary<int[], int>();
-
-            ProduceInitialPopulation(onlookerCount, scoutCount);
+            PersuasionProbability = 0.95;
+            MistakeProbability = 0.01;
+            this.workerCount = workerCount;
+            this.scoutCount = scoutCount;
         }
 
-        private void ProduceInitialPopulation(int onlookerCount, int scoutCount)
-        {
-            employed = new List<Bee>(onlookerCount);
-            onlookers = new List<Bee>(onlookerCount);
-            for (int i = 0; i < onlookerCount; ++i)
+        private void ProduceInitialPopulation()
+        {   // создаёт начальную популяцию: разведчики + ожидающие в улье рабочие
+            employed = new List<Bee>(workerCount);
+            onlookers = new List<Bee>(workerCount);
+            for (int i = 0; i < workerCount; ++i)
                 onlookers.Add(new Bee(Bee.Status.ONLOOKER));
             scouts = new List<Bee>(scoutCount);
             for (int i = 0; i < scoutCount; ++i)
@@ -72,6 +76,7 @@ namespace SBC
 
         public void Solve()
         {
+            ProduceInitialPopulation();
             int cycleCount = 0;
             while (cycleCount < maxCycles)
             {
@@ -79,23 +84,26 @@ namespace SBC
                 OnlookerPhase();
                 EmployedPhase();
                 KeepBestPath();
-                ++cycleCount;
+                if (++cycleCount % reportEvery == 0)
+                {
+                    Console.WriteLine("Iteration " + cycleCount.ToString());
+                    Console.WriteLine(this);
+                }                
             }
         }
 
         private void KeepBestPath()
-        {
-            foreach (int[] path in solutions.Keys)
-                if (bestPath == null || solutions[path] < bestDistance)
+        {   // если рабочим удалось найти лучшее решение, запоминает его
+            foreach (Bee bee in employed)
+                if (bestPath == null || bee.CurrentPathDistance < bestDistance)
                 {
-                    bestDistance = solutions[path];
-                    bestPath = path;
+                    bestDistance = bee.CurrentPathDistance;
+                    bestPath = bee.CurrentPath;
                 }
         }
 
         private void EmployedPhase()
         {
-            solutions.Clear();
             foreach (Bee bee in employed)
                 ProcessEmployedBee(bee);
 
@@ -104,27 +112,29 @@ namespace SBC
 
         private void OnlookerPhase()
         {
+            Dictionary<double, int[]> rollingWheel = CreateScoutedPathsRollingWheel();
+            
+            foreach (Bee bee in onlookers)
+                ProcessOnlookerBee(bee, rollingWheel);
+
+            onlookers.RemoveAll(bee => bee.CurrentStatus != Bee.Status.ONLOOKER);
+        }
+
+        private Dictionary<double, int[]> CreateScoutedPathsRollingWheel()
+        {   // строит рулетку решений разведчиков = проецирует каждое решение в отрезок внутри [0..1]
+            // длины отрезков пропорциональны добротности значениям целевой функции
             int distanceSum = 0;
             foreach (int[] path in scoutedPaths.Keys)
                 distanceSum += scoutedPaths[path];
-            Dictionary<double, int[]> probToPath = new Dictionary<double, int[]>();
+            Dictionary<double, int[]> res = new Dictionary<double, int[]>();
             double prevProb = 0.0;
             foreach (int[] path in scoutedPaths.Keys)
             {
                 double prob = scoutedPaths[path] / (double)distanceSum;
-                probToPath.Add(prevProb + prob, path);
+                res.Add(prevProb + prob, path);
                 prevProb += prob;
             }
-            double[] probRange = probToPath.Keys
-                .ToList()
-                .Concat(new List<double>{0.0})
-                .ToArray();
-            Array.Sort(probRange);
-
-            foreach (Bee bee in onlookers)
-                ProcessOnlookerBee(bee, probToPath, probRange);
-
-            onlookers.RemoveAll(bee => bee.CurrentStatus != Bee.Status.ONLOOKER);
+            return res;
         }
 
         private void ScoutPhase()
@@ -136,22 +146,38 @@ namespace SBC
             scouts.RemoveAll(bee => bee.CurrentStatus != Bee.Status.SCOUT);
         }
 
-        private void ProcessOnlookerBee(Bee bee, Dictionary<double, int[]> probToPath, double[] probRange)
+        private void ProcessOnlookerBee(Bee bee, Dictionary<double, int[]> rollingWheel)
         {
-            bool isPersuaded = random.NextDouble() < probPersuasion;
+            if (scouts.Count < scoutCount)
+            {   // если в улье мало разведчиков
+                bee.CurrentStatus = Bee.Status.SCOUT;
+                scouts.Add(bee);
+                return;
+            }
+            bool isPersuaded = random.NextDouble() < PersuasionProbability;
             if (isPersuaded)
             {
-                int[] path = null;
-                double probability = random.NextDouble();
-                for (int i = 0; i < probRange.Length - 1; ++i)
-                    if (probability >= probRange[i] && probability < probRange[i + 1])
-                        path = probToPath[probRange[i + 1]];
-                if (path == null)
-                    path = probToPath.Values.First();
+                int[] path = GetPathFromWheel(random.NextDouble(), rollingWheel);
                 bee.ChangePath(path, scoutedPaths[path]);
                 bee.CurrentStatus = Bee.Status.EMPLOYED;
                 employed.Add(bee);
             }
+        }
+
+        private int[] GetPathFromWheel(double randomDouble, Dictionary<double, int[]> rollingWheel)
+        {   // вычисляет попадание точки в отрезок на рулетке и получает оттуда соответствующее решение
+            int[] res = null;
+            double[] wheelRange = new List<double> { 0.0 }
+                .Concat(rollingWheel.Keys)
+                .ToArray();
+            Array.Sort(wheelRange);
+            for (int i = 0; i < wheelRange.Length - 1; ++i)
+                if (randomDouble >= wheelRange[i]
+                    && randomDouble < wheelRange[i + 1])
+                    res = rollingWheel[wheelRange[i + 1]];
+            if (res == null)
+                res = rollingWheel.Values.First();
+            return res;
         }
 
         private void ProcessEmployedBee(Bee bee)
@@ -159,7 +185,7 @@ namespace SBC
             int[] neighborSolution = graph.ModifyRandomPath(bee.CurrentPath);
             int neighborDistance = graph.MeasureDistance(neighborSolution);
 
-            bool isMistaken = random.NextDouble() < probMistake;
+            bool isMistaken = random.NextDouble() < MistakeProbability;
             bool foundNewSolution = neighborDistance < bee.CurrentPathDistance;
 
             if (foundNewSolution ^ isMistaken) // XOR 
@@ -173,11 +199,16 @@ namespace SBC
                 bee.UnluckyIterCount = 0;
                 onlookers.Add(bee);
             }
-            solutions.Add(bee.CurrentPath, bee.CurrentPathDistance);
         }
 
         private void ProcessScoutBee(Bee bee)
         {
+            if (onlookers.Count == 0)
+            {   // если в улье нет свободных рабочих, нет смысла искать решение
+                bee.CurrentStatus = Bee.Status.ONLOOKER;
+                onlookers.Add(bee);
+                return;
+            }
             int[] randomSolution = graph.RandomPath(pathStart, pathEnd);
             int solutionDistance = graph.MeasureDistance(randomSolution);
             bee.ChangePath(randomSolution, solutionDistance);
