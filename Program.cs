@@ -22,9 +22,9 @@ namespace SimulatedBeeColony
                 int numberWorkers = Convert.ToInt32(totalNumberBees * .85); ;
                 int numberScout = Convert.ToInt32(totalNumberBees * .15); ;
 
-                int maxNumberVisits = 5;
-                int maxNumberCycles = 10;
-                int reportFreq = 1;
+                int maxNumberVisits = 3;
+                int maxNumberCycles = 20;
+                int reportFreq = 2;
 
                 Hive hive = new Hive(numberWorkers, numberScout, maxNumberVisits, 
                     graph, pathStart, pathEnd, maxNumberCycles, reportFreq);

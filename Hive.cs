@@ -84,7 +84,7 @@ namespace SBC
                 OnlookerPhase();
                 EmployedPhase();
                 KeepBestPath();
-                if (++cycleCount % reportEvery == 0)
+                if (cycleCount++ % reportEvery == 0)
                 {
                     Console.WriteLine("Iteration " + cycleCount.ToString());
                     Console.WriteLine(this);
@@ -130,7 +130,7 @@ namespace SBC
             double prevProb = 0.0;
             foreach (int[] path in scoutedPaths.Keys)
             {
-                double prob = scoutedPaths[path] / (double)distanceSum;
+                double prob = 1.0 - scoutedPaths[path] / (double)distanceSum;
                 res.Add(prevProb + prob, path);
                 prevProb += prob;
             }
@@ -143,17 +143,11 @@ namespace SBC
             foreach (Bee bee in scouts) {
                 ProcessScoutBee(bee);
             }
-            scouts.RemoveAll(bee => bee.CurrentStatus != Bee.Status.SCOUT);
+            //scouts.RemoveAll(bee => bee.CurrentStatus != Bee.Status.SCOUT);
         }
 
         private void ProcessOnlookerBee(Bee bee, Dictionary<double, int[]> rollingWheel)
         {
-            if (scouts.Count < scoutCount)
-            {   // если в улье мало разведчиков
-                bee.CurrentStatus = Bee.Status.SCOUT;
-                scouts.Add(bee);
-                return;
-            }
             bool isPersuaded = random.NextDouble() < PersuasionProbability;
             if (isPersuaded)
             {
@@ -205,8 +199,6 @@ namespace SBC
         {
             if (onlookers.Count == 0)
             {   // если в улье нет свободных рабочих, нет смысла искать решение
-                bee.CurrentStatus = Bee.Status.ONLOOKER;
-                onlookers.Add(bee);
                 return;
             }
             int[] randomSolution = graph.RandomPath(pathStart, pathEnd);
